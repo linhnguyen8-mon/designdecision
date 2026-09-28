@@ -1,0 +1,14 @@
+name = "design-decision-bot"
+main = "src/index.ts"
+compatibility_date = "2026-09-28"
+
+[vars]
+# Comma-separated Telegram numeric user IDs allowed to use the bot.
+ALLOWED_TELEGRAM_USER_IDS = "1869884542"
+# Keep model configurable so free-tier model changes do not require code edits.
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "design_decision_bot"
+database_id = "3fc5061b-14b4-4cce-a915-35dc7575b25c"
