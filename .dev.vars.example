@@ -1,0 +1,5 @@
+BOT_TOKEN="telegram-bot-token-from-botfather"
+WEBHOOK_SECRET="random-secret-used-when-setting-telegram-webhook"
+GEMINI_API_KEY="google-ai-studio-api-key"
+ALLOWED_TELEGRAM_USER_IDS="123456789"
+GEMINI_MODEL="gemini-2.5-flash"
