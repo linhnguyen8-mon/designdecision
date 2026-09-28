@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS flow_states (
+  telegram_user_id TEXT PRIMARY KEY,
+  flow TEXT NOT NULL,
+  step TEXT NOT NULL,
+  data_json TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
