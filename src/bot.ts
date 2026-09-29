@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import { determineProposedStage } from "./coach-state";
 import { BotRepository } from "./db";
-import { askGemini, GeminiQuotaError, GeminiResponseError } from "./gemini";
+import { askGemini, GeminiAuthError, GeminiQuotaError, GeminiResponseError } from "./gemini";
 import {
   getCategory,
   getKeyword,
@@ -474,6 +474,27 @@ async function processUserAnswer(args: {
 }): Promise<void> {
   const { ctx, env, repo, telegramUserId, session, message } = args;
 
+  const saveFailedGeminiTurn = async (botResponse: string, gap: string): Promise<void> => {
+    await repo.addTurn({
+      sessionId: session.id,
+      telegramUserId,
+      stage: session.currentStage,
+      userMessage: message,
+      botResponse,
+      payload: {
+        intent: "answer",
+        feedback: "",
+        gap,
+        next_question: "",
+        stage_ready: false,
+        recommended_action: "stay_current",
+        transition_reason: "",
+        hint_level: session.hintLevel,
+        evidence_notes: [],
+      },
+    });
+  };
+
   try {
     const context = await getContext(repo, session);
     const payload = await askGemini(env, context, message);
@@ -506,25 +527,10 @@ async function processUserAnswer(args: {
     await sendLong(ctx, botResponse, proposedStage ? transitionKeyboard() : undefined);
   } catch (error) {
     if (error instanceof GeminiQuotaError) {
-      await repo.addTurn({
-        sessionId: session.id,
-        telegramUserId,
-        stage: session.currentStage,
-        userMessage: message,
-        botResponse:
-          "Gemini đang hết quota. Mình đã lưu câu trả lời và giữ nguyên stage để tiếp tục sau.",
-        payload: {
-          intent: "answer",
-          feedback: "",
-          gap: "Gemini quota exceeded",
-          next_question: "",
-          stage_ready: false,
-          recommended_action: "stay_current",
-          transition_reason: "",
-          hint_level: session.hintLevel,
-          evidence_notes: [],
-        },
-      });
+      await saveFailedGeminiTurn(
+        "Gemini đang hết quota. Mình đã lưu câu trả lời và giữ nguyên stage để tiếp tục sau.",
+        "Gemini quota exceeded",
+      );
       await sendLong(
         ctx,
         escapeMarkdown(
@@ -534,11 +540,33 @@ async function processUserAnswer(args: {
       return;
     }
 
-    if (error instanceof GeminiResponseError) {
+    if (error instanceof GeminiAuthError) {
+      await saveFailedGeminiTurn(
+        "Gemini API key hoặc model chưa hợp lệ. Mình đã lưu câu trả lời và giữ nguyên stage.",
+        error.message,
+      );
       await sendLong(
         ctx,
         escapeMarkdown(
-          "Gemini trả về phản hồi không hợp lệ hoặc đang lỗi. Stage chưa đổi; bạn có thể thử lại sau một chút.",
+          [
+            "Gemini API key hoặc model chưa hợp lệ nên bot chưa tạo được phản hồi AI.",
+            "Mình đã lưu câu trả lời và giữ nguyên stage.",
+            "Cần cập nhật lại GEMINI_API_KEY trong Cloudflare secret rồi thử tiếp.",
+          ].join("\n"),
+        ),
+      );
+      return;
+    }
+
+    if (error instanceof GeminiResponseError) {
+      await saveFailedGeminiTurn(
+        "Gemini đang lỗi phản hồi. Mình đã lưu câu trả lời và giữ nguyên stage.",
+        error.message,
+      );
+      await sendLong(
+        ctx,
+        escapeMarkdown(
+          "Gemini trả về phản hồi không hợp lệ hoặc đang lỗi. Mình đã lưu câu trả lời và giữ nguyên stage; bạn có thể thử lại sau một chút.",
         ),
       );
       return;
