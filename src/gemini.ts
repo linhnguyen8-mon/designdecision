@@ -144,8 +144,29 @@ function extractText(data: unknown): string {
   return response.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
 }
 
+export class GeminiAuthError extends Error {}
 export class GeminiQuotaError extends Error {}
 export class GeminiResponseError extends Error {}
+
+function geminiErrorMessage(status: number, body: string): string {
+  if (!body.trim()) return `Gemini request failed with ${status}`;
+
+  try {
+    const data = JSON.parse(body) as {
+      error?: {
+        message?: string;
+        status?: string;
+        details?: Array<{
+          reason?: string;
+        }>;
+      };
+    };
+    const reason = data.error?.details?.find((detail) => detail.reason)?.reason;
+    return [data.error?.status, reason, data.error?.message].filter(Boolean).join(": ");
+  } catch {
+    return body.slice(0, 300);
+  }
+}
 
 export async function askGemini(
   env: Env,
@@ -187,7 +208,11 @@ export async function askGemini(
   }
 
   if (!response.ok) {
-    throw new GeminiResponseError(`Gemini request failed with ${response.status}`);
+    const message = geminiErrorMessage(response.status, await response.text());
+    if (response.status === 401 || response.status === 403) {
+      throw new GeminiAuthError(message);
+    }
+    throw new GeminiResponseError(message);
   }
 
   const text = extractText(await response.json());
